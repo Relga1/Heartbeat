@@ -3034,5 +3034,23 @@ async function init() {
 
 init();
 </script>
-</body>
+init();
+</script>           ← existing script ends here
+
+<!-- 👇 PASTE THE ENTIRE PATCH HERE 👇 -->
+<!-- ===== BATCH PHOTO UPLOAD PATCH ===== -->
+<style>
+  .photo-thumbs { ... }
+  ...
+</style>
+<script>
+(function batchPhotoPatch() {
+  ...
+})();
+</script>
+<!-- 👆 END OF PATCH 👆 -->
+
+</body>          ← existing closing tags
+</html>
+
 </html>
