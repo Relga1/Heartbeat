@@ -1,0 +1,1119 @@
+<!-- ===== DAILY REPORT BUILDER PATCH ===== -->
+<style>
+  /* Report button in top nav */
+  .nav-icon.report-btn { position: relative; }
+  .nav-icon-badge {
+    position: absolute; top: -2px; right: -4px;
+    background: var(--accent); color: white;
+    font-size: 9px; font-weight: 700;
+    min-width: 16px; height: 16px;
+    border-radius: 100px; padding: 0 4px;
+    display: none; align-items: center; justify-content: center;
+    line-height: 1;
+  }
+  .nav-icon-badge.show { display: inline-flex; }
+
+  /* Report builder full-screen view */
+  .report-builder {
+    display: none;
+    position: fixed; inset: 0;
+    background: var(--bg);
+    z-index: 250;
+    overflow-y: auto;
+    padding-bottom: 100px;
+    animation: slideInRight 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .report-builder.show { display: block; }
+
+  .report-header {
+    position: sticky; top: 0;
+    background: rgba(251, 251, 253, 0.92);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    padding: 14px 22px;
+    display: flex; align-items: center; gap: 12px;
+    z-index: 10;
+  }
+  .report-back {
+    background: none; border: none; color: var(--accent);
+    font-family: inherit; font-size: 16px; font-weight: 500;
+    display: flex; align-items: center; gap: 2px;
+    padding: 4px 8px 4px 0; cursor: pointer;
+  }
+  .report-header-title {
+    font-size: 17px; font-weight: 600; letter-spacing: -0.015em;
+    flex: 1; text-align: center;
+  }
+  .report-header-spacer { width: 60px; }
+
+  .report-intro {
+    padding: 22px 22px 14px;
+    text-align: center;
+  }
+  .report-intro-kicker {
+    font-size: 13px; font-weight: 600; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;
+  }
+  .report-intro-title {
+    font-size: 26px; font-weight: 700; letter-spacing: -0.022em; line-height: 1.1;
+    margin-bottom: 8px;
+  }
+  .report-intro-sub {
+    font-size: 14px; color: var(--text-2); margin-bottom: 6px;
+  }
+
+  /* Step 1: Picker */
+  .report-picker-section {
+    padding: 8px 22px 20px;
+  }
+  .report-picker-quick-row {
+    display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap;
+  }
+  .report-quick-btn {
+    flex: 1; min-width: 140px;
+    background: var(--surface); border: 1px solid var(--line);
+    padding: 11px 14px; border-radius: 12px;
+    font-family: inherit; font-size: 13px; font-weight: 600;
+    color: var(--text); cursor: pointer;
+    text-align: left; line-height: 1.3;
+  }
+  .report-quick-btn.primary {
+    background: var(--accent-soft); color: var(--accent);
+    border-color: rgba(255,59,48,0.2);
+  }
+  .report-quick-btn .rqb-sub {
+    font-size: 11px; color: var(--text-3); font-weight: 500;
+    margin-top: 2px; text-transform: none; letter-spacing: 0;
+  }
+  .report-quick-btn.primary .rqb-sub { color: var(--accent); opacity: 0.7; }
+
+  .report-search-bar {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 100px; padding: 11px 18px;
+    width: 100%; font-family: inherit; font-size: 15px;
+    margin-bottom: 14px; color: var(--text);
+  }
+  .report-search-bar:focus { outline: none; border-color: var(--text); }
+
+  .report-section-label {
+    font-size: 11px; font-weight: 700; color: var(--text-3);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin: 18px 0 10px;
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .report-section-label .rsl-count { color: var(--text-2); font-weight: 600; }
+
+  .report-prop-list {
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .report-prop-row {
+    background: var(--surface); border: 1px solid var(--line-soft);
+    border-radius: 14px; padding: 13px 16px;
+    display: flex; align-items: center; gap: 12px;
+    cursor: pointer; transition: background 0.15s;
+  }
+  .report-prop-row:active { background: var(--bg); }
+  .report-prop-row.selected {
+    background: var(--accent-soft);
+    border-color: rgba(255,59,48,0.3);
+  }
+  .report-prop-check {
+    width: 24px; height: 24px; border-radius: 50%;
+    border: 2px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: all 0.15s;
+  }
+  .report-prop-row.selected .report-prop-check {
+    background: var(--accent); border-color: var(--accent); color: white;
+  }
+  .report-prop-info { flex: 1; min-width: 0; }
+  .report-prop-addr {
+    font-weight: 600; font-size: 14px; letter-spacing: -0.01em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .report-prop-meta {
+    font-size: 11px; color: var(--text-3); margin-top: 2px;
+    display: flex; gap: 6px; flex-wrap: wrap;
+  }
+  .report-prop-meta-dot { color: var(--line); }
+  .report-prop-activity-pill {
+    background: var(--bg);
+    font-size: 10px; font-weight: 600;
+    padding: 2px 8px; border-radius: 100px;
+    color: var(--text-2);
+  }
+  .report-prop-activity-pill.today {
+    background: rgba(52, 199, 89, 0.15); color: var(--green);
+  }
+
+  /* Step 2: Review */
+  .report-review-card {
+    background: var(--surface); border-radius: 16px;
+    margin: 0 22px 14px;
+    border: 1px solid var(--line-soft);
+    overflow: hidden;
+  }
+  .report-review-head {
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--line-soft);
+    background: var(--bg);
+  }
+  .report-review-head-top {
+    display: flex; align-items: flex-start; gap: 10px;
+    margin-bottom: 6px;
+  }
+  .report-review-num {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--accent); color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 12px; flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .report-review-addr {
+    flex: 1; min-width: 0;
+    font-weight: 700; font-size: 16px; letter-spacing: -0.015em;
+    line-height: 1.25;
+  }
+  .report-review-remove {
+    background: none; border: none;
+    color: var(--text-3); cursor: pointer;
+    padding: 2px 4px; font-size: 12px;
+    flex-shrink: 0;
+  }
+  .report-review-meta {
+    font-size: 11px; color: var(--text-3);
+    padding-left: 34px;
+    text-transform: uppercase; letter-spacing: 0.04em; font-weight: 500;
+  }
+
+  .report-review-counts {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 1px; background: var(--line-soft);
+  }
+  .report-review-count {
+    background: var(--surface);
+    padding: 10px 4px;
+    text-align: center;
+  }
+  .report-count-num {
+    font-size: 18px; font-weight: 700; letter-spacing: -0.02em;
+    color: var(--text); line-height: 1;
+  }
+  .report-count-num.zero { color: var(--text-3); }
+  .report-count-lbl {
+    font-size: 9px; color: var(--text-3);
+    text-transform: uppercase; letter-spacing: 0.05em;
+    margin-top: 4px; font-weight: 600;
+  }
+
+  .report-review-actions {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 1px; background: var(--line-soft);
+  }
+  .report-review-action-btn {
+    background: var(--surface);
+    border: none; cursor: pointer;
+    padding: 12px 4px;
+    font-family: inherit;
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    color: var(--accent);
+    transition: background 0.15s;
+  }
+  .report-review-action-btn:active { background: var(--accent-soft); }
+  .report-review-action-btn svg { width: 18px; height: 18px; }
+  .report-review-action-lbl {
+    font-size: 11px; font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  /* Bottom export bar */
+  .report-export-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    padding: 14px 22px calc(14px + env(safe-area-inset-bottom));
+    background: rgba(251, 251, 253, 0.95);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+    z-index: 95;
+    display: none;
+  }
+  .report-export-bar.show { display: block; }
+  .report-export-btn {
+    width: 100%;
+    background: var(--text); color: var(--surface);
+    border: none; border-radius: 100px;
+    padding: 15px;
+    font-family: inherit; font-size: 16px; font-weight: 600;
+    letter-spacing: -0.01em; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .report-export-btn:disabled { opacity: 0.4; }
+  .report-export-btn-sub {
+    font-size: 11px; color: var(--text-3);
+    text-align: center; margin-top: 6px; font-weight: 500;
+  }
+
+  .report-empty {
+    text-align: center; padding: 40px 20px;
+    color: var(--text-3); font-size: 14px;
+    background: var(--surface);
+    border: 1px dashed var(--line); border-radius: 14px;
+    margin: 0 22px;
+  }
+</style>
+
+<script>
+(function dailyReportPatch() {
+  function ready(fn) {
+    if (document.readyState !== 'loading') fn();
+    else document.addEventListener('DOMContentLoaded', fn);
+  }
+  ready(() => {
+    // ===== Add report button to top nav =====
+    const navRight = document.querySelector('.nav-right');
+    const settingsBtn = document.getElementById('settingsBtn');
+    if (!navRight || !settingsBtn) {
+      console.warn('Daily report patch: nav not found');
+      return;
+    }
+    const reportBtn = document.createElement('button');
+    reportBtn.className = 'nav-icon report-btn';
+    reportBtn.id = 'reportBuilderBtn';
+    reportBtn.title = 'Build daily report';
+    reportBtn.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/>
+        <line x1="16" y1="17" x2="8" y2="17"/>
+        <polyline points="10 9 9 9 8 9"/>
+      </svg>
+      <span class="nav-icon-badge" id="reportTodayBadge">0</span>
+    `;
+    navRight.insertBefore(reportBtn, settingsBtn);
+
+    // ===== Build the report builder DOM =====
+    const builder = document.createElement('div');
+    builder.id = 'reportBuilder';
+    builder.className = 'report-builder';
+    builder.innerHTML = `
+      <div class="report-header">
+        <button class="report-back" id="reportBack">‹ Back</button>
+        <div class="report-header-title" id="reportHeaderTitle">Daily Report</div>
+        <div class="report-header-spacer"></div>
+      </div>
+
+      <!-- STEP 1: PICKER -->
+      <div id="reportStep1">
+        <div class="report-intro">
+          <div class="report-intro-kicker">Step 1 of 2</div>
+          <div class="report-intro-title">Pick properties.</div>
+          <div class="report-intro-sub">Choose any properties you want in today's report.</div>
+        </div>
+
+        <div class="report-picker-section">
+          <div class="report-picker-quick-row">
+            <button class="report-quick-btn primary" id="rqbToday">
+              Today's activity
+              <div class="rqb-sub" id="rqbTodayCount">— properties</div>
+            </button>
+            <button class="report-quick-btn" id="rqbWeek">
+              This week's route
+              <div class="rqb-sub" id="rqbWeekCount">— properties</div>
+            </button>
+          </div>
+
+          <input class="report-search-bar" id="reportPickerSearch" placeholder="Search any property…" type="text">
+
+          <div class="report-section-label" id="rplSelectedLabel" style="display:none;">
+            <span>Selected</span>
+            <span class="rsl-count" id="rplSelectedCount">0</span>
+          </div>
+          <div class="report-prop-list" id="rplSelected"></div>
+
+          <div class="report-section-label" id="rplActiveLabel">
+            <span>Properties with activity</span>
+            <span class="rsl-count" id="rplActiveCount">0</span>
+          </div>
+          <div class="report-prop-list" id="rplActive"></div>
+
+          <div class="report-section-label" id="rplSearchLabel" style="display:none;">
+            <span>Search results</span>
+            <span class="rsl-count" id="rplSearchCount">0</span>
+          </div>
+          <div class="report-prop-list" id="rplSearch"></div>
+        </div>
+      </div>
+
+      <!-- STEP 2: REVIEW -->
+      <div id="reportStep2" style="display:none;">
+        <div class="report-intro">
+          <div class="report-intro-kicker">Step 2 of 2</div>
+          <div class="report-intro-title">Review &amp; add.</div>
+          <div class="report-intro-sub">Add anything else to each property before exporting.</div>
+        </div>
+        <div id="reportReviewList"></div>
+      </div>
+
+      <!-- BOTTOM BAR -->
+      <div class="report-export-bar" id="reportBottomBar">
+        <button class="report-export-btn" id="reportBottomBtn">Continue</button>
+        <div class="report-export-btn-sub" id="reportBottomSub">—</div>
+      </div>
+    `;
+    document.body.appendChild(builder);
+
+    // ===== State =====
+    let reportStep = 1;
+    let selectedCodes = [];   // ordered list of property codes in the report
+    let reportTargetPropCode = null;  // when a sheet is opened from the report
+
+    // ===== Helpers =====
+    function isCreatedToday(iso) {
+      if (!iso) return false;
+      const d = new Date(iso);
+      const now = new Date();
+      return d.getFullYear() === now.getFullYear() &&
+             d.getMonth() === now.getMonth() &&
+             d.getDate() === now.getDate();
+    }
+    function countActivityToday(code) {
+      let n = 0;
+      ((cache.notes && cache.notes[code]) || []).forEach(x => { if (isCreatedToday(x.created)) n++; });
+      ((cache.photos && cache.photos[code]) || []).forEach(x => { if (isCreatedToday(x.created)) n++; });
+      ((cache.invoices && cache.invoices[code]) || []).forEach(x => { if (isCreatedToday(x.created)) n++; });
+      ((cache.tasks && cache.tasks[code]) || []).forEach(x => { if (isCreatedToday(x.created)) n++; });
+      return n;
+    }
+    function totalActivity(code) {
+      return ((cache.notes && cache.notes[code])||[]).length
+        + ((cache.photos && cache.photos[code])||[]).length
+        + ((cache.invoices && cache.invoices[code])||[]).length
+        + ((cache.tasks && cache.tasks[code])||[]).length;
+    }
+    function propsWithActivity() {
+      const codes = new Set();
+      ['notes','photos','invoices','tasks'].forEach(t => {
+        Object.keys(cache[t] || {}).forEach(c => {
+          if ((cache[t][c] || []).length > 0) codes.add(c);
+        });
+      });
+      return [...codes].map(c => findProp(c)).filter(Boolean);
+    }
+    function propsWithActivityToday() {
+      const codes = new Set();
+      ['notes','photos','invoices','tasks'].forEach(t => {
+        Object.keys(cache[t] || {}).forEach(c => {
+          (cache[t][c] || []).forEach(it => {
+            if (isCreatedToday(it.created)) codes.add(c);
+          });
+        });
+      });
+      return [...codes];
+    }
+
+    // ===== Today badge on the nav button =====
+    function updateTodayBadge() {
+      const today = propsWithActivityToday();
+      const badge = document.getElementById('reportTodayBadge');
+      if (today.length > 0) {
+        badge.textContent = today.length > 99 ? '99+' : today.length;
+        badge.classList.add('show');
+      } else {
+        badge.classList.remove('show');
+      }
+    }
+    // Initial + periodic refresh
+    updateTodayBadge();
+    setInterval(updateTodayBadge, 8000);
+
+    // ===== Open / Close =====
+    function openBuilder() {
+      reportStep = 1;
+      selectedCodes = [];
+      builder.classList.add('show');
+      document.body.style.overflow = 'hidden';
+      showStep(1);
+      renderPicker();
+      updateBottomBar();
+    }
+    function closeBuilder() {
+      builder.classList.remove('show');
+      document.body.style.overflow = '';
+      reportTargetPropCode = null;
+      // Refresh the underlying property view in case things changed
+      if (typeof currentProp !== 'undefined' && currentProp && typeof renderDetailContent === 'function') {
+        try { renderDetailContent(); } catch(e) {}
+      }
+      if (typeof refresh === 'function') {
+        try { refresh(); } catch(e) {}
+      }
+      updateTodayBadge();
+    }
+    reportBtn.addEventListener('click', openBuilder);
+    document.getElementById('reportBack').addEventListener('click', () => {
+      if (reportStep === 2) {
+        showStep(1);
+        renderPicker();
+        updateBottomBar();
+      } else {
+        closeBuilder();
+      }
+    });
+
+    function showStep(n) {
+      reportStep = n;
+      document.getElementById('reportStep1').style.display = n === 1 ? 'block' : 'none';
+      document.getElementById('reportStep2').style.display = n === 2 ? 'block' : 'none';
+      document.getElementById('reportHeaderTitle').textContent =
+        n === 1 ? 'Daily Report · Pick' : 'Daily Report · Review';
+      // Reset scroll
+      builder.scrollTop = 0;
+    }
+
+    // ===== Picker rendering =====
+    function buildPropRow(p, isSelected) {
+      const todayCount = countActivityToday(p.code);
+      const totalCount = totalActivity(p.code);
+      const pills = [];
+      if (todayCount > 0) {
+        pills.push(`<span class="report-prop-activity-pill today">${todayCount} today</span>`);
+      } else if (totalCount > 0) {
+        pills.push(`<span class="report-prop-activity-pill">${totalCount} ${totalCount === 1 ? 'entry' : 'entries'}</span>`);
+      }
+      const region = p.region || p.city;
+      return `
+        <div class="report-prop-row ${isSelected ? 'selected' : ''}" data-code="${p.code}">
+          <div class="report-prop-check">
+            ${isSelected ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+          </div>
+          <div class="report-prop-info">
+            <div class="report-prop-addr">${escapeHTML(p.address.split(',')[0])}</div>
+            <div class="report-prop-meta">
+              <span>${escapeHTML(region)}</span>
+              <span class="report-prop-meta-dot">·</span>
+              <span>${p.units} units</span>
+              ${pills.length > 0 ? '<span class="report-prop-meta-dot">·</span>' + pills.join('') : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderPicker() {
+      const searchEl = document.getElementById('reportPickerSearch');
+      const q = (searchEl.value || '').toLowerCase().trim();
+
+      // Quick button labels
+      const todayCodes = propsWithActivityToday();
+      document.getElementById('rqbTodayCount').textContent =
+        `${todayCodes.length} ${todayCodes.length === 1 ? 'property' : 'properties'}`;
+      const weekCount = (cache.route || []).length;
+      document.getElementById('rqbWeekCount').textContent =
+        `${weekCount} ${weekCount === 1 ? 'property' : 'properties'}`;
+
+      // Selected section
+      const selectedListEl = document.getElementById('rplSelected');
+      const selectedLabelEl = document.getElementById('rplSelectedLabel');
+      if (selectedCodes.length > 0) {
+        selectedLabelEl.style.display = 'flex';
+        document.getElementById('rplSelectedCount').textContent = selectedCodes.length;
+        selectedListEl.innerHTML = selectedCodes
+          .map(c => findProp(c))
+          .filter(Boolean)
+          .map(p => buildPropRow(p, true))
+          .join('');
+      } else {
+        selectedLabelEl.style.display = 'none';
+        selectedListEl.innerHTML = '';
+      }
+
+      // If searching, show search results and hide activity list
+      if (q) {
+        document.getElementById('rplActiveLabel').style.display = 'none';
+        document.getElementById('rplActive').innerHTML = '';
+        document.getElementById('rplSearchLabel').style.display = 'flex';
+
+        const all = getAllProps();
+        const matches = all.filter(p =>
+          !selectedCodes.includes(p.code) && (
+            p.address.toLowerCase().includes(q) ||
+            p.code.toLowerCase().includes(q) ||
+            (p.city || '').toLowerCase().includes(q)
+          )
+        ).slice(0, 50);
+
+        document.getElementById('rplSearchCount').textContent = matches.length;
+        document.getElementById('rplSearch').innerHTML = matches.length === 0
+          ? '<div class="report-empty" style="margin:0;">No matches.</div>'
+          : matches.map(p => buildPropRow(p, false)).join('');
+      } else {
+        // Show properties with activity (any time), excluding already-selected
+        document.getElementById('rplSearchLabel').style.display = 'none';
+        document.getElementById('rplSearch').innerHTML = '';
+
+        const active = propsWithActivity()
+          .filter(p => !selectedCodes.includes(p.code))
+          .sort((a, b) => {
+            const at = countActivityToday(a.code);
+            const bt = countActivityToday(b.code);
+            if (at !== bt) return bt - at;
+            return totalActivity(b.code) - totalActivity(a.code);
+          });
+
+        document.getElementById('rplActiveLabel').style.display = 'flex';
+        document.getElementById('rplActiveCount').textContent = active.length;
+
+        if (active.length === 0 && selectedCodes.length === 0) {
+          document.getElementById('rplActive').innerHTML =
+            '<div class="report-empty">No activity yet. Use the search above to add any property.</div>';
+        } else if (active.length === 0) {
+          document.getElementById('rplActive').innerHTML =
+            '<div class="report-empty" style="margin:0;">All properties with activity are already selected.</div>';
+        } else {
+          document.getElementById('rplActive').innerHTML = active.map(p => buildPropRow(p, false)).join('');
+        }
+      }
+
+      // Wire up clicks
+      builder.querySelectorAll('.report-prop-row').forEach(row => {
+        row.addEventListener('click', () => {
+          const code = row.dataset.code;
+          if (selectedCodes.includes(code)) {
+            selectedCodes = selectedCodes.filter(c => c !== code);
+          } else {
+            selectedCodes.push(code);
+          }
+          renderPicker();
+          updateBottomBar();
+        });
+      });
+    }
+
+    document.getElementById('reportPickerSearch').addEventListener('input', renderPicker);
+
+    document.getElementById('rqbToday').addEventListener('click', () => {
+      const todayCodes = propsWithActivityToday();
+      todayCodes.forEach(c => {
+        if (!selectedCodes.includes(c)) selectedCodes.push(c);
+      });
+      if (todayCodes.length === 0) {
+        showToast('No activity today yet');
+      } else {
+        showToast(`Added ${todayCodes.length} ${todayCodes.length === 1 ? 'property' : 'properties'}`);
+      }
+      renderPicker();
+      updateBottomBar();
+    });
+    document.getElementById('rqbWeek').addEventListener('click', () => {
+      const week = cache.route || [];
+      week.forEach(c => {
+        if (!selectedCodes.includes(c)) selectedCodes.push(c);
+      });
+      if (week.length === 0) {
+        showToast('No properties in this week');
+      } else {
+        showToast(`Added ${week.length} ${week.length === 1 ? 'property' : 'properties'}`);
+      }
+      renderPicker();
+      updateBottomBar();
+    });
+
+    // ===== Review rendering =====
+    function renderReview() {
+      const list = document.getElementById('reportReviewList');
+      if (selectedCodes.length === 0) {
+        list.innerHTML = '<div class="report-empty">No properties selected. Go back and pick some.</div>';
+        return;
+      }
+      list.innerHTML = selectedCodes.map((code, idx) => {
+        const p = findProp(code);
+        if (!p) return '';
+        const nN = (cache.notes[code] || []).length;
+        const nP = (cache.photos[code] || []).length;
+        const nI = (cache.invoices[code] || []).length;
+        const nT = (cache.tasks[code] || []).length;
+        const region = p.region || p.city;
+        return `
+          <div class="report-review-card" data-code="${code}">
+            <div class="report-review-head">
+              <div class="report-review-head-top">
+                <div class="report-review-num">${idx + 1}</div>
+                <div class="report-review-addr">${escapeHTML(p.address.split(',')[0])}</div>
+                <button class="report-review-remove" data-code="${code}" title="Remove from report">✕</button>
+              </div>
+              <div class="report-review-meta">${escapeHTML(region)} · ${p.units} units · ${p.code}</div>
+            </div>
+            <div class="report-review-counts">
+              <div class="report-review-count">
+                <div class="report-count-num ${nT === 0 ? 'zero' : ''}">${nT}</div>
+                <div class="report-count-lbl">Tasks</div>
+              </div>
+              <div class="report-review-count">
+                <div class="report-count-num ${nN === 0 ? 'zero' : ''}">${nN}</div>
+                <div class="report-count-lbl">Notes</div>
+              </div>
+              <div class="report-review-count">
+                <div class="report-count-num ${nP === 0 ? 'zero' : ''}">${nP}</div>
+                <div class="report-count-lbl">Photos</div>
+              </div>
+              <div class="report-review-count">
+                <div class="report-count-num ${nI === 0 ? 'zero' : ''}">${nI}</div>
+                <div class="report-count-lbl">Invoices</div>
+              </div>
+            </div>
+            <div class="report-review-actions">
+              <button class="report-review-action-btn" data-action="note" data-code="${code}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+                <span class="report-review-action-lbl">Note</span>
+              </button>
+              <button class="report-review-action-btn" data-action="photo" data-code="${code}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                  <circle cx="12" cy="13" r="4"/>
+                </svg>
+                <span class="report-review-action-lbl">Photo</span>
+              </button>
+              <button class="report-review-action-btn" data-action="invoice" data-code="${code}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="12" y1="18" x2="12" y2="12"/>
+                  <line x1="9" y1="15" x2="15" y2="15"/>
+                </svg>
+                <span class="report-review-action-lbl">Invoice</span>
+              </button>
+              <button class="report-review-action-btn" data-action="task" data-code="${code}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 11 12 14 22 4"/>
+                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                </svg>
+                <span class="report-review-action-lbl">Task</span>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Remove buttons
+      list.querySelectorAll('.report-review-remove').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const code = btn.dataset.code;
+          if (!confirm('Remove this property from the report?')) return;
+          selectedCodes = selectedCodes.filter(c => c !== code);
+          if (selectedCodes.length === 0) {
+            showStep(1);
+            renderPicker();
+          } else {
+            renderReview();
+          }
+          updateBottomBar();
+        });
+      });
+
+      // Action buttons — open the existing sheets, scoped to this property
+      list.querySelectorAll('.report-review-action-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const code = btn.dataset.code;
+          const action = btn.dataset.action;
+          openSheetForReportProperty(code, action);
+        });
+      });
+    }
+
+    // ===== Open existing sheets, redirected to a specific property =====
+    // We temporarily set currentProp to the target so all the existing handlers
+    // (note/photo/invoice/task) save to the right place. We then restore.
+    function openSheetForReportProperty(code, action) {
+      const p = findProp(code);
+      if (!p) return;
+      // Remember previous currentProp so we can put things back
+      const prevProp = (typeof currentProp !== 'undefined') ? currentProp : null;
+      reportTargetPropCode = code;
+      // Make the global state point at the property the user picked
+      window.currentProp = p;
+
+      if (action === 'note') {
+        document.getElementById('noteSheetSub').textContent = p.address.split(',')[0];
+        document.getElementById('noteText').value = '';
+        document.getElementById('noteSheet').classList.add('open');
+        setTimeout(() => document.getElementById('noteText').focus(), 300);
+      } else if (action === 'photo') {
+        document.getElementById('photoSheetSub').textContent = p.address.split(',')[0];
+        document.getElementById('photoSheet').classList.add('open');
+        // The batch photo patch resets its own state when actPhoto is clicked.
+        // Manually trigger a reset by simulating a fresh open:
+        const photoInput = document.getElementById('photoInput');
+        if (photoInput) photoInput.value = '';
+        const photoCaption = document.getElementById('photoCaption');
+        if (photoCaption) photoCaption.value = '';
+        const thumbs = document.getElementById('photoThumbs');
+        if (thumbs) { thumbs.innerHTML = ''; thumbs.style.display = 'none'; }
+        const progEl = document.getElementById('photoProgress');
+        if (progEl) progEl.classList.remove('show');
+        const photoName = document.getElementById('photoName');
+        if (photoName) photoName.textContent = '';
+        const savePhotoBtn = document.getElementById('savePhoto');
+        if (savePhotoBtn) {
+          savePhotoBtn.textContent = 'Save photo';
+          savePhotoBtn.disabled = false;
+        }
+        const sheetTitle = document.querySelector('#photoSheet .sheet-title');
+        if (sheetTitle) sheetTitle.textContent = 'Add photo';
+      } else if (action === 'invoice') {
+        document.getElementById('invoiceSheetSub').textContent = p.address.split(',')[0];
+        document.getElementById('invVendor').value = '';
+        document.getElementById('invAmount').value = '';
+        document.getElementById('invScope').value = '';
+        document.getElementById('invFile').value = '';
+        document.getElementById('invFileName').textContent = '';
+        if (typeof updateVendorSuggestions === 'function') updateVendorSuggestions();
+        document.getElementById('invoiceSheet').classList.add('open');
+      } else if (action === 'task') {
+        // Use the existing task sheet, "for property" mode
+        document.getElementById('taskSheetSub').textContent = p.address.split(',')[0];
+        document.getElementById('taskTitle').value = '';
+        document.getElementById('taskDueDate').value = '';
+        document.getElementById('taskPropertyField').style.display = 'none';
+        // Reset priority picker
+        document.querySelectorAll('.priority-option').forEach(opt => {
+          opt.classList.remove('active', 'high', 'medium', 'low');
+          if (opt.dataset.priority === 'medium') opt.classList.add('active', 'medium');
+        });
+        if (typeof pendingTaskPriority !== 'undefined') {
+          window.pendingTaskPriority = 'medium';
+        }
+        document.getElementById('taskSheet').classList.add('open');
+        setTimeout(() => document.getElementById('taskTitle').focus(), 300);
+      }
+
+      // When any sheet closes (or any save completes), we want to re-render the review card.
+      // Use a MutationObserver on .open class as a clean way.
+      const sheets = ['noteSheet','photoSheet','invoiceSheet','taskSheet'];
+      sheets.forEach(sid => {
+        const el = document.getElementById(sid);
+        if (!el || el._reportObserverAttached) return;
+        el._reportObserverAttached = true;
+        const obs = new MutationObserver(() => {
+          if (!el.classList.contains('open')) {
+            // A sheet just closed — re-render review if we're in step 2
+            if (reportStep === 2 && builder.classList.contains('show')) {
+              setTimeout(() => renderReview(), 50);
+            }
+          }
+        });
+        obs.observe(el, { attributes: true, attributeFilter: ['class'] });
+      });
+
+      // Save the prevProp so we can restore on close (best-effort).
+      // Most save handlers re-render via renderDetailContent which expects currentProp.
+      // Since we set currentProp to the target, that's safe. After close, the next time
+      // the user navigates a real property, currentProp gets set again normally.
+      // We don't aggressively restore prevProp here because the user may still be
+      // looking at the report builder, not a property page.
+      builder._previousProp = prevProp;
+    }
+
+    // ===== Bottom bar =====
+    function updateBottomBar() {
+      const bar = document.getElementById('reportBottomBar');
+      const btn = document.getElementById('reportBottomBtn');
+      const sub = document.getElementById('reportBottomSub');
+
+      if (reportStep === 1) {
+        if (selectedCodes.length === 0) {
+          bar.classList.remove('show');
+        } else {
+          bar.classList.add('show');
+          btn.textContent = `Continue with ${selectedCodes.length} ${selectedCodes.length === 1 ? 'property' : 'properties'} →`;
+          btn.disabled = false;
+          sub.textContent = 'You can still add or remove on the next step.';
+        }
+      } else {
+        bar.classList.add('show');
+        btn.innerHTML = `📄 Export full report (${selectedCodes.length})`;
+        btn.disabled = selectedCodes.length === 0;
+        const totalEntries = selectedCodes.reduce((s, c) => s + totalActivity(c), 0);
+        sub.textContent = `${totalEntries} total ${totalEntries === 1 ? 'entry' : 'entries'} across selected properties.`;
+      }
+    }
+
+    document.getElementById('reportBottomBtn').addEventListener('click', async () => {
+      if (reportStep === 1) {
+        if (selectedCodes.length === 0) return;
+        showStep(2);
+        renderReview();
+        updateBottomBar();
+      } else {
+        // Export!
+        await exportFullReport();
+      }
+    });
+
+    // ===== PDF Export — multi-property =====
+    async function exportFullReport() {
+      if (selectedCodes.length === 0) return;
+      const btn = document.getElementById('reportBottomBtn');
+      const origText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = 'Building PDF…';
+      showToast('Building report…');
+
+      try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+        const W = doc.internal.pageSize.getWidth();
+        const H = doc.internal.pageSize.getHeight();
+        const margin = 50;
+        let y = margin;
+
+        function newPageIfNeeded(needed = 60) {
+          if (y + needed > H - margin) { doc.addPage(); y = margin; }
+        }
+        function text(str, size = 11, style = 'normal', color = [29, 29, 31]) {
+          doc.setFontSize(size);
+          doc.setFont('helvetica', style);
+          doc.setTextColor(color[0], color[1], color[2]);
+          const lines = doc.splitTextToSize(String(str), W - margin * 2);
+          lines.forEach(line => {
+            newPageIfNeeded(size + 4);
+            doc.text(line, margin, y);
+            y += size * 1.4;
+          });
+        }
+        function divider() {
+          newPageIfNeeded(20);
+          doc.setDrawColor(220, 220, 220);
+          doc.setLineWidth(0.5);
+          doc.line(margin, y, W - margin, y);
+          y += 18;
+        }
+        function sectionLabel(title) {
+          newPageIfNeeded(40);
+          y += 8;
+          text(title.toUpperCase(), 10, 'bold', [255, 59, 48]);
+          y += 4;
+        }
+
+        const today = new Date();
+        const dateStr = today.toLocaleDateString('en-US', {
+          weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+        });
+
+        // === COVER PAGE ===
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(110, 110, 115);
+        doc.text(`Daily Property Report · ${dateStr}`, W - margin, y, { align: 'right' });
+        y += 40;
+
+        text('Daily Property Report', 28, 'bold');
+        y += 4;
+        text(dateStr, 12, 'normal', [110, 110, 115]);
+        y += 16;
+        divider();
+
+        // Summary stats
+        let totalNotes = 0, totalPhotos = 0, totalInvoices = 0, totalTasks = 0, totalSpend = 0, totalUnits = 0;
+        selectedCodes.forEach(code => {
+          const p = findProp(code);
+          if (p) totalUnits += p.units;
+          totalNotes += (cache.notes[code] || []).length;
+          totalPhotos += (cache.photos[code] || []).length;
+          const invs = cache.invoices[code] || [];
+          totalInvoices += invs.length;
+          totalSpend += invs.reduce((s, inv) => s + (Number(inv.amount) || 0), 0);
+          totalTasks += (cache.tasks[code] || []).length;
+        });
+
+        sectionLabel('Report Summary');
+        text(`${selectedCodes.length} ${selectedCodes.length === 1 ? 'property' : 'properties'} · ${fmtNum(totalUnits)} units`, 12, 'bold');
+        y += 4;
+        text(`${totalTasks} tasks · ${totalNotes} notes · ${totalPhotos} photos · ${totalInvoices} invoices`, 11);
+        if (totalSpend > 0) {
+          y += 2;
+          text(`Total invoice spend: ${fmtMoney(totalSpend)}`, 11);
+        }
+        y += 12;
+
+        // Table of contents
+        sectionLabel('Properties in this report');
+        selectedCodes.forEach((code, idx) => {
+          const p = findProp(code);
+          if (!p) return;
+          newPageIfNeeded(20);
+          text(`${idx + 1}.  ${p.address.split(',')[0]}  —  ${p.region || p.city} · ${p.units} units`, 11);
+        });
+
+        // === EACH PROPERTY ===
+        for (let i = 0; i < selectedCodes.length; i++) {
+          const code = selectedCodes[i];
+          const p = findProp(code);
+          if (!p) continue;
+
+          doc.addPage();
+          y = margin;
+
+          // Property header
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(110, 110, 115);
+          doc.text(`Property ${i + 1} of ${selectedCodes.length}`, W - margin, y, { align: 'right' });
+          y += 24;
+
+          text(p.address.split(',')[0], 22, 'bold');
+          text(p.address, 11, 'normal', [110, 110, 115]);
+          y += 6;
+          const meta = [`${p.units} units`, p.region || p.city, p.code];
+          if (p.pct_leased !== undefined) {
+            meta.push(`${p.pct_leased.toFixed(1)}% leased`);
+            if (p.vacant > 0) meta.push(`${p.vacant} vacant`);
+          }
+          text(meta.join(' · '), 10, 'normal', [134, 134, 139]);
+          y += 10;
+          divider();
+
+          const notes = (cache.notes[code] || []);
+          const photos = (cache.photos[code] || []);
+          const invoices = (cache.invoices[code] || []);
+          const tasks = (cache.tasks[code] || []);
+          const propSpend = invoices.reduce((s, inv) => s + (Number(inv.amount) || 0), 0);
+          const openTasks = tasks.filter(t => !t.done).length;
+
+          sectionLabel('Summary');
+          text(`${openTasks} open tasks  ·  ${notes.length} notes  ·  ${photos.length} photos  ·  ${invoices.length} invoices`, 11);
+          if (propSpend > 0) text(`Invoice spend: ${fmtMoney(propSpend)}`, 11);
+          y += 8;
+
+          // Tasks
+          if (tasks.length > 0) {
+            divider();
+            sectionLabel('Tasks');
+            const sortedT = (typeof sortTasks === 'function') ? sortTasks(tasks) : tasks;
+            sortedT.forEach(t => {
+              newPageIfNeeded(50);
+              const status = t.done ? '[done] ' : (isOverdueDate(t.dueDate) ? '[OVERDUE] ' : '');
+              const due = t.dueDate ? `due ${fmtDueDate(t.dueDate)}` : 'no due date';
+              const pri = `${(t.priority || 'medium').toUpperCase()} priority`;
+              text(status + t.title, 11, 'bold');
+              text(`${due}  ·  ${pri}`, 10, 'normal', [110, 110, 115]);
+              y += 4;
+            });
+          }
+
+          // Notes
+          if (notes.length > 0) {
+            divider();
+            sectionLabel('Notes');
+            notes.forEach(n => {
+              newPageIfNeeded(60);
+              const date = new Date(n.created).toLocaleDateString('en-US', {
+                month: 'short', day: 'numeric', year: 'numeric'
+              });
+              text(date, 9, 'bold', [134, 134, 139]);
+              text(n.text, 11);
+              y += 8;
+            });
+          }
+
+          // Invoices
+          if (invoices.length > 0) {
+            divider();
+            sectionLabel('Invoices');
+            invoices.forEach(inv => {
+              newPageIfNeeded(60);
+              const date = new Date(inv.created).toLocaleDateString('en-US', {
+                month: 'short', day: 'numeric', year: 'numeric'
+              });
+              text(`${inv.vendor || 'Vendor'}  ·  ${fmtMoney(inv.amount || 0)}`, 11, 'bold');
+              if (inv.scope) text(inv.scope, 10, 'normal', [80, 80, 85]);
+              text(date, 9, 'normal', [134, 134, 139]);
+              y += 6;
+            });
+          }
+
+          // Photos
+          if (photos.length > 0) {
+            divider();
+            sectionLabel('Photos');
+            const gap = 10;
+            const cols = 3;
+            const colWidth = (W - margin * 2 - gap * (cols - 1)) / cols;
+            let col = 0;
+            let rowY = y;
+            for (const photo of photos) {
+              if (col === 0) {
+                newPageIfNeeded(colWidth + 20);
+                rowY = y;
+              }
+              const x = margin + col * (colWidth + gap);
+              try {
+                doc.addImage(photo.data, 'JPEG', x, rowY, colWidth, colWidth, undefined, 'FAST');
+              } catch (e) {
+                console.warn('Photo add failed:', e);
+              }
+              col++;
+              if (col >= cols) {
+                col = 0;
+                y = rowY + colWidth + gap;
+              }
+            }
+            if (col > 0) y = rowY + colWidth + gap;
+
+            // Photo captions
+            const captioned = photos.filter(ph => ph.caption);
+            if (captioned.length > 0) {
+              y += 4;
+              text('Captions:', 10, 'bold', [110, 110, 115]);
+              captioned.forEach(ph => {
+                newPageIfNeeded(30);
+                text(`• ${ph.caption}`, 10, 'normal', [80, 80, 85]);
+              });
+            }
+          }
+        }
+
+        // Page numbers + footer
+        const totalPages = doc.internal.getNumberOfPages();
+        for (let i = 1; i <= totalPages; i++) {
+          doc.setPage(i);
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(180, 180, 180);
+          doc.text(
+            `Daily Report · ${dateStr} · Page ${i} of ${totalPages}`,
+            W / 2, H - 20, { align: 'center' }
+          );
+        }
+
+        const safeDate = today.toISOString().slice(0, 10);
+        const filename = `Heartbeat_Daily_Report_${safeDate}.pdf`;
+        doc.save(filename);
+        showToast(`Report exported · ${selectedCodes.length} ${selectedCodes.length === 1 ? 'property' : 'properties'}`);
+
+        // Close the builder after a moment
+        setTimeout(() => {
+          closeBuilder();
+        }, 800);
+      } catch (err) {
+        console.error('PDF export failed:', err);
+        alert('Could not build the report: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = origText;
+      }
+    }
+
+    // ===== Update badge when data changes (light polling — already done every 8s) =====
+    // Also poke the badge once cache is populated. Try a few times in the first few seconds
+    // after the app loads in case Supabase fetch hasn't finished.
+    [500, 1500, 3000, 6000].forEach(ms => {
+      setTimeout(updateTodayBadge, ms);
+    });
+  });
+})();
+</script>
