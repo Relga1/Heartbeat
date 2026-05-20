@@ -1313,9 +1313,22 @@ body {
       Get one at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> → API Keys. Costs about $0.005 per check.
     </div>
     <div class="field">
+<div class="field">
       <label class="field-label">Anthropic API key</label>
       <input class="field-input" id="apiKey" type="password" placeholder="sk-ant-...">
     </div>
+
+    <div style="height: 18px;"></div>
+
+    <div class="api-warning" style="background: rgba(0, 122, 255, 0.08); border-color: rgba(0, 122, 255, 0.3);">
+      <strong>Google Maps API key for Street View thumbnails.</strong><br>
+      Get one at <a href="https://console.cloud.google.com/google/maps-apis/credentials" target="_blank">Google Cloud Console</a> and enable the Street View Static API. Costs about $7 per 1,000 images.
+    </div>
+    <div class="field">
+      <label class="field-label">Google Maps API key</label>
+      <input class="field-input" id="gmapsApiKey" type="password" placeholder="AIza...">
+    </div>
+
     <div class="sheet-actions">
       <button class="btn btn-ghost" data-close>Close</button>
       <button class="btn btn-primary" id="saveApiKey">Save</button>
@@ -4956,6 +4969,505 @@ init();
   });
 })();
 </script>
+<!-- ===== DAILY REPORT UPGRADES PATCH ===== -->
+<style>
+  .rrc-streetview {
+    width: 60px; height: 60px;
+    border-radius: 12px;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: var(--bg);
+  }
+  .rrc-streetview-placeholder {
+    width: 60px; height: 60px;
+    border-radius: 12px;
+    background: var(--accent);
+    color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 22px; flex-shrink: 0;
+  }
+  .report-review-card.has-thumb .report-review-meta {
+    padding-left: 70px !important;
+  }
+  .rrc-item-pick { position: relative; padding-left: 30px; }
+  .rrc-item-pick > .rrc-pick-box {
+    position: absolute; left: 0; top: 14px;
+    width: 20px; height: 20px;
+    border: 2px solid var(--line); border-radius: 6px;
+    background: var(--surface); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .rrc-item-pick.checked > .rrc-pick-box {
+    background: var(--accent); border-color: var(--accent); color: white;
+  }
+  .rrc-item-pick.checked > .rrc-pick-box svg { display: block; }
+  .rrc-item-pick > .rrc-pick-box svg { display: none; }
+  .rrc-photo-thumb { position: relative; }
+  .rrc-photo-thumb .rrc-photo-pick {
+    position: absolute; top: 4px; left: 4px;
+    width: 22px; height: 22px;
+    border: 2px solid white; border-radius: 6px;
+    background: rgba(0,0,0,0.4); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; z-index: 2;
+  }
+  .rrc-photo-thumb.checked .rrc-photo-pick {
+    background: var(--accent); border-color: var(--accent);
+  }
+  .rrc-photo-thumb .rrc-photo-pick svg { display: none; color: white; }
+  .rrc-photo-thumb.checked .rrc-photo-pick svg { display: block; }
+  .rrc-photo-thumb:not(.checked) > img { opacity: 0.45; }
+  .rrc-invoice-vendor { font-weight: 600; font-size: 14px; }
+  .rrc-invoice-amount { font-weight: 700; font-size: 16px; letter-spacing: -0.01em; }
+  .rrc-invoice-scope { font-size: 12px; color: var(--text-2); margin-top: 2px; }
+  .rrc-invoice-meta { font-size: 11px; color: var(--text-3); margin-top: 4px; }
+</style>
+<script>
+(function dailyReportUpgrades() {
+  const GMAPS_KEY_STORAGE = 'heartbeat_gmaps_api_key_v1';
+  function loadGmapsKey() { return localStorage.getItem(GMAPS_KEY_STORAGE) || ''; }
+  function saveGmapsKey(k) { localStorage.setItem(GMAPS_KEY_STORAGE, k || ''); }
+  window.loadGmapsKey = loadGmapsKey;
+  window.saveGmapsKey = saveGmapsKey;
 
+  function ready(fn) {
+    if (document.readyState !== 'loading') fn();
+    else document.addEventListener('DOMContentLoaded', fn);
+  }
+  ready(() => {
+    // Wire the new Google Maps key field into the existing settings open/save flow
+    const settingsBtn = document.getElementById('settingsBtn');
+    const saveBtn = document.getElementById('saveApiKey');
+    if (settingsBtn) {
+      settingsBtn.addEventListener('click', () => {
+        const f = document.getElementById('gmapsApiKey');
+        if (f) f.value = loadGmapsKey();
+      });
+    }
+    if (saveBtn) {
+      saveBtn.addEventListener('click', () => {
+        const f = document.getElementById('gmapsApiKey');
+        if (f) saveGmapsKey(f.value.trim());
+      });
+    }
+
+    const selected = {};
+    const seenItems = {};
+    function ensureSel(code) {
+      if (!selected[code]) {
+        selected[code] = { notes: new Set(), photos: new Set(), tasks: new Set(), invoices: new Set() };
+        ['notes','photos','tasks','invoices'].forEach(t => {
+          ((cache[t] && cache[t][code]) || []).forEach(it => selected[code][t].add(it.id));
+        });
+        seenItems[code] = { notes: new Set(), photos: new Set(), tasks: new Set(), invoices: new Set() };
+        ['notes','photos','tasks','invoices'].forEach(t => {
+          ((cache[t] && cache[t][code]) || []).forEach(it => seenItems[code][t].add(it.id));
+        });
+      } else {
+        ['notes','photos','tasks','invoices'].forEach(t => {
+          ((cache[t] && cache[t][code]) || []).forEach(it => {
+            if (!seenItems[code][t].has(it.id)) {
+              selected[code][t].add(it.id);
+              seenItems[code][t].add(it.id);
+            }
+          });
+        });
+      }
+    }
+    function isChecked(code, type, id) {
+      return selected[code] && selected[code][type] && selected[code][type].has(id);
+    }
+    function toggleCheck(code, type, id) {
+      if (!selected[code]) ensureSel(code);
+      if (selected[code][type].has(id)) selected[code][type].delete(id);
+      else selected[code][type].add(id);
+    }
+
+    function streetViewUrl(address, size) {
+      const key = loadGmapsKey();
+      if (!key || !address) return '';
+      const sz = size || 120;
+      return `https://maps.googleapis.com/maps/api/streetview?size=${sz}x${sz}&location=${encodeURIComponent(address)}&key=${encodeURIComponent(key)}`;
+    }
+
+    function enhanceReviewList() {
+      const list = document.getElementById('reportReviewList');
+      if (!list) return;
+      const hasKey = !!loadGmapsKey();
+
+      list.querySelectorAll('.report-review-card').forEach(card => {
+        const code = card.dataset.code;
+        const p = (typeof findProp === 'function') ? findProp(code) : null;
+        if (!p) return;
+        const numEl = card.querySelector('.report-review-num');
+        if (numEl && !numEl.dataset.upgraded && hasKey) {
+          const idx = numEl.textContent;
+          const img = document.createElement('img');
+          img.className = 'rrc-streetview';
+          img.alt = p.address;
+          img.dataset.idx = idx;
+          img.src = streetViewUrl(p.address, 120);
+          img.onerror = function() {
+            const ph = document.createElement('div');
+            ph.className = 'rrc-streetview-placeholder';
+            ph.textContent = idx;
+            if (img.parentNode) img.parentNode.replaceChild(ph, img);
+          };
+          numEl.replaceWith(img);
+          card.classList.add('has-thumb');
+        }
+      });
+
+      list.querySelectorAll('.rrc-item[data-type][data-id]').forEach(itemEl => {
+        if (itemEl.dataset.pickWired) return;
+        const type = itemEl.dataset.type;
+        const id = itemEl.dataset.id;
+        const card = itemEl.closest('.report-review-card');
+        const code = card ? card.dataset.code : null;
+        if (!code) return;
+        ensureSel(code);
+        itemEl.classList.add('rrc-item-pick');
+        if (isChecked(code, type, id)) itemEl.classList.add('checked');
+        const box = document.createElement('div');
+        box.className = 'rrc-pick-box';
+        box.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+        box.addEventListener('click', (e) => {
+          e.stopPropagation();
+          toggleCheck(code, type, id);
+          itemEl.classList.toggle('checked', isChecked(code, type, id));
+        });
+        itemEl.prepend(box);
+        itemEl.dataset.pickWired = '1';
+      });
+
+      list.querySelectorAll('.rrc-photo-thumb').forEach(thumb => {
+        if (thumb.dataset.pickWired) return;
+        const img = thumb.querySelector('img');
+        if (!img) return;
+        const id = img.dataset.id;
+        const card = thumb.closest('.report-review-card');
+        const code = card ? card.dataset.code : null;
+        if (!code || !id) return;
+        ensureSel(code);
+        if (isChecked(code, 'photos', id)) thumb.classList.add('checked');
+        const pick = document.createElement('div');
+        pick.className = 'rrc-photo-pick';
+        pick.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+        pick.addEventListener('click', (e) => {
+          e.stopPropagation();
+          toggleCheck(code, 'photos', id);
+          thumb.classList.toggle('checked', isChecked(code, 'photos', id));
+        });
+        thumb.appendChild(pick);
+        thumb.dataset.pickWired = '1';
+      });
+
+      list.querySelectorAll('.report-review-card').forEach(card => {
+        if (card.dataset.invoicesAdded) return;
+        const code = card.dataset.code;
+        if (!code) return;
+        const invoices = (cache.invoices && cache.invoices[code]) || [];
+        const sec = document.createElement('div');
+        sec.className = 'rrc-section';
+        sec.dataset.section = 'invoices';
+        sec.dataset.code = code;
+        const count = invoices.length;
+        const countCls = count > 0 ? 'has' : '';
+        sec.innerHTML = `
+          <div class="rrc-section-head">
+            <div class="rrc-section-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="9" y1="15" x2="15" y2="15"/>
+              </svg>
+            </div>
+            <div class="rrc-section-title">Invoices</div>
+            <div class="rrc-section-count ${countCls}">${count}</div>
+            <div class="rrc-section-chevron">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+          </div>
+          <div class="rrc-section-body"></div>
+        `;
+        const body = sec.querySelector('.rrc-section-body');
+        if (invoices.length === 0) {
+          body.innerHTML = '<div class="rrc-empty">No invoices yet.</div>';
+        } else {
+          ensureSel(code);
+          const sortedInv = [...invoices].sort((a,b) => new Date(b.created) - new Date(a.created));
+          body.innerHTML = sortedInv.map(inv => {
+            const date = inv.created ? new Date(inv.created).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) : '';
+            const amount = (typeof fmtMoney === 'function') ? fmtMoney(inv.amount || 0) : ('$' + (inv.amount || 0));
+            const esc = window.escapeHTML || ((s) => String(s == null ? '' : s));
+            const checkedCls = isChecked(code, 'invoices', inv.id) ? ' checked' : '';
+            return `
+              <div class="rrc-item rrc-item-pick${checkedCls}" data-type="invoices" data-id="${inv.id}" data-pick-wired="1">
+                <div class="rrc-pick-box">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+                <div style="flex:1; min-width:0;">
+                  <div class="rrc-invoice-vendor">${esc(inv.vendor || 'Vendor')}</div>
+                  <div class="rrc-invoice-amount">${amount}</div>
+                  ${inv.scope ? `<div class="rrc-invoice-scope">${esc(inv.scope)}</div>` : ''}
+                  <div class="rrc-invoice-meta">${date}</div>
+                </div>
+              </div>
+            `;
+          }).join('');
+          body.querySelectorAll('.rrc-item-pick').forEach(itemEl => {
+            const id = itemEl.dataset.id;
+            const box = itemEl.querySelector('.rrc-pick-box');
+            if (!box) return;
+            box.addEventListener('click', (e) => {
+              e.stopPropagation();
+              toggleCheck(code, 'invoices', id);
+              itemEl.classList.toggle('checked', isChecked(code, 'invoices', id));
+            });
+          });
+        }
+        const head = sec.querySelector('.rrc-section-head');
+        head.addEventListener('click', (e) => {
+          e.stopPropagation();
+          sec.classList.toggle('open');
+        });
+        card.appendChild(sec);
+        card.dataset.invoicesAdded = '1';
+      });
+    }
+
+    function startWatching() {
+      const list = document.getElementById('reportReviewList');
+      if (!list) { setTimeout(startWatching, 400); return; }
+      const obs = new MutationObserver(() => {
+        clearTimeout(window.__heartbeatReviewEnhanceT);
+        window.__heartbeatReviewEnhanceT = setTimeout(enhanceReviewList, 30);
+      });
+      obs.observe(list, { childList: true, subtree: true });
+      enhanceReviewList();
+    }
+    startWatching();
+
+    function loadImageAsDataURL(url) {
+      return new Promise((resolve) => {
+        if (!url) { resolve(null); return; }
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            canvas.getContext('2d').drawImage(img, 0, 0);
+            resolve(canvas.toDataURL('image/jpeg', 0.85));
+          } catch (e) { resolve(null); }
+        };
+        img.onerror = () => resolve(null);
+        img.src = url;
+      });
+    }
+
+    async function generateFilteredPDF() {
+      const list = document.getElementById('reportReviewList');
+      if (!list) { alert('No report to export.'); return; }
+      const codes = Array.from(list.querySelectorAll('.report-review-card')).map(c => c.dataset.code).filter(Boolean);
+      if (codes.length === 0) { alert('No properties selected.'); return; }
+
+      if (typeof showToast === 'function') showToast('Generating PDF...');
+
+      const streetviewByCode = {};
+      if (loadGmapsKey()) {
+        await Promise.all(codes.map(async code => {
+          const p = findProp(code);
+          if (!p) return;
+          const dataUrl = await loadImageAsDataURL(streetViewUrl(p.address, 240));
+          if (dataUrl) streetviewByCode[code] = dataUrl;
+        }));
+      }
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+      const W = doc.internal.pageSize.getWidth();
+      const H = doc.internal.pageSize.getHeight();
+      const margin = 50;
+      let y = margin;
+
+      function newPageIfNeeded(n) { n = n || 60; if (y + n > H - margin) { doc.addPage(); y = margin; } }
+      function text(str, size, style, color) {
+        size = size || 11; style = style || 'normal'; color = color || [29, 29, 31];
+        doc.setFontSize(size);
+        doc.setFont('helvetica', style);
+        doc.setTextColor(color[0], color[1], color[2]);
+        doc.splitTextToSize(String(str), W - margin * 2).forEach(line => {
+          newPageIfNeeded(size + 4); doc.text(line, margin, y); y += size * 1.4;
+        });
+      }
+      function divider() { newPageIfNeeded(20); doc.setDrawColor(220,220,220); doc.setLineWidth(0.5); doc.line(margin, y, W - margin, y); y += 18; }
+      function sectionLabel(t) { newPageIfNeeded(40); y += 8; text(t.toUpperCase(), 10, 'bold', [255, 59, 48]); y += 4; }
+
+      const today = new Date();
+      const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+      doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(110, 110, 115);
+      doc.text(`Daily Property Report \u00b7 ${dateStr}`, W - margin, y, { align: 'right' });
+      y += 40;
+      text('Daily Property Report', 28, 'bold'); y += 4;
+      text(dateStr, 12, 'normal', [110, 110, 115]); y += 16;
+      divider();
+
+      let totNotes = 0, totPhotos = 0, totTasks = 0, totInv = 0, totUnits = 0;
+      codes.forEach(code => {
+        const p = findProp(code); if (p) totUnits += p.units;
+        ensureSel(code);
+        const sel = selected[code];
+        ((cache.notes && cache.notes[code]) || []).forEach(x => { if (sel.notes.has(x.id)) totNotes++; });
+        ((cache.photos && cache.photos[code]) || []).forEach(x => { if (sel.photos.has(x.id)) totPhotos++; });
+        ((cache.tasks && cache.tasks[code]) || []).forEach(x => { if (sel.tasks.has(x.id)) totTasks++; });
+        ((cache.invoices && cache.invoices[code]) || []).forEach(x => { if (sel.invoices.has(x.id)) totInv++; });
+      });
+
+      sectionLabel('Report Summary');
+      text(`${codes.length} ${codes.length === 1 ? 'property' : 'properties'} \u00b7 ${(typeof fmtNum==='function'?fmtNum(totUnits):totUnits)} units`, 12, 'bold');
+      y += 4;
+      const parts = [`${totTasks} tasks`, `${totNotes} notes`, `${totPhotos} photos`];
+      if (totInv > 0) parts.push(`${totInv} invoices`);
+      text(parts.join(' \u00b7 '), 11); y += 12;
+
+      sectionLabel('Properties in this report');
+      codes.forEach((code, idx) => {
+        const p = findProp(code); if (!p) return;
+        newPageIfNeeded(20);
+        text(`${idx + 1}.  ${p.address.split(',')[0]}  \u2014  ${p.region || p.city} \u00b7 ${p.units} units`, 11);
+      });
+
+      for (let i = 0; i < codes.length; i++) {
+        const code = codes[i];
+        const p = findProp(code); if (!p) continue;
+        ensureSel(code);
+        const sel = selected[code];
+
+        doc.addPage(); y = margin;
+        doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(110, 110, 115);
+        doc.text(`Property ${i + 1} of ${codes.length}`, W - margin, y, { align: 'right' });
+        y += 24;
+
+        const sv = streetviewByCode[code];
+        if (sv) {
+          const thumbSize = 120;
+          try {
+            doc.addImage(sv, 'JPEG', margin, y, thumbSize, thumbSize, undefined, 'FAST');
+            const textX = margin + thumbSize + 16;
+            const savedY = y;
+            doc.setFontSize(22); doc.setFont('helvetica', 'bold'); doc.setTextColor(29, 29, 31);
+            let ty = savedY + 24;
+            doc.splitTextToSize(p.address.split(',')[0], W - margin - textX).forEach(line => { doc.text(line, textX, ty); ty += 26; });
+            doc.setFontSize(11); doc.setFont('helvetica', 'normal'); doc.setTextColor(110, 110, 115);
+            doc.splitTextToSize(p.address, W - margin - textX).forEach(line => { doc.text(line, textX, ty); ty += 14; });
+            const meta = [`${p.units} units`, p.region || p.city, p.code];
+            if (p.pct_leased !== undefined) { meta.push(`${p.pct_leased.toFixed(1)}% leased`); if (p.vacant > 0) meta.push(`${p.vacant} vacant`); }
+            doc.setFontSize(10); doc.setTextColor(134, 134, 139);
+            doc.splitTextToSize(meta.join(' \u00b7 '), W - margin - textX).forEach(line => { doc.text(line, textX, ty); ty += 12; });
+            y = Math.max(savedY + thumbSize, ty) + 14;
+          } catch (e) {
+            text(p.address.split(',')[0], 22, 'bold'); text(p.address, 11, 'normal', [110, 110, 115]); y += 6;
+          }
+        } else {
+          text(p.address.split(',')[0], 22, 'bold');
+          text(p.address, 11, 'normal', [110, 110, 115]); y += 6;
+          const meta = [`${p.units} units`, p.region || p.city, p.code];
+          if (p.pct_leased !== undefined) { meta.push(`${p.pct_leased.toFixed(1)}% leased`); if (p.vacant > 0) meta.push(`${p.vacant} vacant`); }
+          text(meta.join(' \u00b7 '), 10, 'normal', [134, 134, 139]); y += 10;
+        }
+        divider();
+
+        const notes = ((cache.notes && cache.notes[code]) || []).filter(n => sel.notes.has(n.id));
+        const photos = ((cache.photos && cache.photos[code]) || []).filter(ph => sel.photos.has(ph.id));
+        const tasks = ((cache.tasks && cache.tasks[code]) || []).filter(t => sel.tasks.has(t.id));
+        const invoices = ((cache.invoices && cache.invoices[code]) || []).filter(inv => sel.invoices.has(inv.id));
+        const openTasks = tasks.filter(t => !t.done).length;
+
+        sectionLabel('Summary');
+        const partsP = [`${openTasks} open tasks`, `${notes.length} notes`, `${photos.length} photos`];
+        if (invoices.length > 0) partsP.push(`${invoices.length} invoices`);
+        text(partsP.join('  \u00b7  '), 11); y += 8;
+
+        if (tasks.length > 0) {
+          divider(); sectionLabel('Tasks');
+          const sortedT = (typeof sortTasks === 'function') ? sortTasks(tasks) : tasks;
+          sortedT.forEach(t => {
+            newPageIfNeeded(50);
+            const status = t.done ? '[done] ' : ((typeof isOverdueDate==='function' && isOverdueDate(t.dueDate)) ? '[OVERDUE] ' : '');
+            const due = t.dueDate ? `due ${(typeof fmtDueDate==='function'?fmtDueDate(t.dueDate):t.dueDate)}` : 'no due date';
+            text(status + t.title, 11, 'bold');
+            text(`${due}  \u00b7  ${(t.priority || 'medium').toUpperCase()} priority`, 10, 'normal', [110, 110, 115]); y += 4;
+          });
+        }
+        if (notes.length > 0) {
+          divider(); sectionLabel('Notes');
+          notes.forEach(n => {
+            newPageIfNeeded(60);
+            text(new Date(n.created).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}), 9, 'bold', [134, 134, 139]);
+            text(n.text, 11); y += 8;
+          });
+        }
+        if (invoices.length > 0) {
+          divider(); sectionLabel('Invoices');
+          invoices.forEach(inv => {
+            newPageIfNeeded(60);
+            const date = inv.created ? new Date(inv.created).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) : '';
+            const amount = (typeof fmtMoney==='function') ? fmtMoney(inv.amount || 0) : ('$' + (inv.amount || 0));
+            text(`${inv.vendor || 'Vendor'} \u2014 ${amount}`, 12, 'bold');
+            const sub = []; if (date) sub.push(date); if (inv.scope) sub.push(inv.scope);
+            if (sub.length) text(sub.join('  \u00b7  '), 10, 'normal', [110, 110, 115]); y += 6;
+          });
+        }
+        if (photos.length > 0) {
+          divider(); sectionLabel('Photos');
+          const gap = 10, cols = 3;
+          const cw = (W - margin * 2 - gap * (cols - 1)) / cols;
+          let col = 0, rowY = y;
+          for (const photo of photos) {
+            if (col === 0) { newPageIfNeeded(cw + 20); rowY = y; }
+            try { doc.addImage(photo.data, 'JPEG', margin + col * (cw + gap), rowY, cw, cw, undefined, 'FAST'); } catch (e) {}
+            col++;
+            if (col >= cols) { col = 0; y = rowY + cw + gap; }
+          }
+          if (col > 0) y = rowY + cw + gap;
+          const captioned = photos.filter(ph => ph.caption);
+          if (captioned.length > 0) {
+            y += 4; text('Captions:', 10, 'bold', [110, 110, 115]);
+            captioned.forEach(ph => { newPageIfNeeded(30); text(`\u2022 ${ph.caption}`, 10, 'normal', [80, 80, 85]); });
+          }
+        }
+      }
+
+      const totalPages = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(180, 180, 180);
+        doc.text(`Daily Report \u00b7 ${dateStr} \u00b7 Page ${i} of ${totalPages}`, W / 2, H - 20, { align: 'center' });
+      }
+      doc.save(`Heartbeat_Daily_Report_${today.toISOString().slice(0, 10)}.pdf`);
+      if (typeof showToast === 'function') showToast('PDF downloaded');
+    }
+
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('button, a');
+      if (!btn || (btn.tagName !== 'BUTTON' && btn.tagName !== 'A')) return;
+      const t = (btn.textContent || '').trim().toLowerCase();
+      if (!t || t === 'cancel' || t === 'save') return;
+      const isExport = (/\b(generate|export|download)\b/.test(t) && /\bpdf\b/.test(t));
+      if (!isExport) return;
+      const list = document.getElementById('reportReviewList');
+      if (!list || !list.children.length) return;
+      e.preventDefault(); e.stopImmediatePropagation(); e.stopPropagation();
+      generateFilteredPDF().catch(err => {
+        console.error('PDF gen failed:', err);
+        if (typeof showToast === 'function') showToast('PDF failed: ' + err.message);
+      });
+    }, true);
+  });
+})();
+</script>
 </body>
 </html>
